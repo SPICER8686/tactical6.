@@ -3610,8 +3610,10 @@
       let aIdx = 0;
       myTeamArr.forEach((slot, sOrder) => {
         if (slot.id === myNetId) {
-          const sx = mySpawn.x + (sOrder % 2 ? 1 : -1) * (2.2 * Math.ceil(sOrder / 2));
+          const sx = mySpawn.x + (sOrder % 2 ? 1 : -1) * (1.8 * Math.ceil(sOrder / 2));
           pSelf.pos.set(sx, 0, mySpawn.z);
+          resolveCircleObstacles(pSelf.pos, PLAYER_RADIUS);
+          pSelf.hp = 100; pSelf.shadowCastT = 0; pSelf.spawnLockT = 0;
           return;
         }
         const u = allyUnits[aIdx] || 0;
@@ -5454,7 +5456,7 @@
 
   // ===== CUSTOM ROOM STATE & SYNC =====
   let customAddNpcMode = false;
-  let customRoom = { blue: [null,null,null,null,null], red: [null,null,null,null,null], specs: [], readyIds: [], mapIdx: -1, started: false };
+  let customRoom = { blue: [null,null,null,null,null], red: [null,null,null,null,null], specs: [], readyIds: [], mapIdx: -1, started: false, rev: 0 };
   let custMqtt = null;
   let custBc = null;
   let custTopic = '';
@@ -5494,8 +5496,10 @@
   }
 
   let custCloseDelayTimer = null;
+  let custStartFallbackTimer = null;
   function closeCustomRoomNet(delayMs = 0) {
     if (custHbTimer) { clearInterval(custHbTimer); custHbTimer = null; }
+    if (custStartFallbackTimer) { clearTimeout(custStartFallbackTimer); custStartFallbackTimer = null; }
     if (custCloseDelayTimer) { clearTimeout(custCloseDelayTimer); custCloseDelayTimer = null; }
     const doClose = () => {
       try { if (custMqtt) custMqtt.end(false); } catch (e) {}
@@ -5510,7 +5514,8 @@
     }
   }
 
-  function broadcastCustomRoom() {
+  function broadcastCustomRoom(bumpRev = true) {
+    if (bumpRev) customRoom.rev = (customRoom.rev || 0) + 1;
     const msg = JSON.stringify({ type: 'cust_sync', from: myNetId, room: customRoom });
     if (custMqtt && custMqtt.connected && custTopic) custMqtt.publish(custTopic, msg);
     if (custBc) custBc.postMessage(JSON.parse(msg));
@@ -5607,15 +5612,26 @@
   }
 
   let custHbTimer = null;
+  function computeDeterministicCustomStart(humanIds) {
+    const sorted = humanIds.slice().sort();
+    const matchId = encodeURIComponent((custTopic || 'c') + '_' + sorted.join('_'));
+    let mIdx = (Number.isInteger(customRoom.mapIdx) && customRoom.mapIdx >= 0 && customRoom.mapIdx < MAPS.length) ? customRoom.mapIdx : -1;
+    if (mIdx < 0) {
+      let h = 0;
+      for (let i = 0; i < matchId.length; i++) h = ((h * 31) + matchId.charCodeAt(i)) >>> 0;
+      mIdx = h % MAPS.length;
+    }
+    return { hostId: sorted[0], mIdx, matchId };
+  }
+
   function tryTriggerCustomStartFromReady() {
     if (customRoom.started) return;
     const humanIds = getCustomHumanIds();
     const ready = (customRoom.readyIds || []).filter(id => humanIds.includes(id));
     if (humanIds.length > 0 && ready.length >= humanIds.length) {
-      const hostId = humanIds.slice().sort()[0];
+      const { hostId, mIdx, matchId } = computeDeterministicCustomStart(humanIds);
       if (hostId === myNetId) {
-        const mIdx = (Number.isInteger(customRoom.mapIdx) && customRoom.mapIdx >= 0 && customRoom.mapIdx < MAPS.length) ? customRoom.mapIdx : Math.floor(Math.random() * MAPS.length);
-        const matchId = encodeURIComponent((custTopic || 'c') + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6));
+        if (custStartFallbackTimer) { clearTimeout(custStartFallbackTimer); custStartFallbackTimer = null; }
         customRoom.started = true;
         customRoom.startMeta = { mapIdx: mIdx, hostId, matchId };
         const startPayload = { type: 'cust_start', from: myNetId, mapIdx: mIdx, room: customRoom, hostId, matchId };
@@ -5628,7 +5644,26 @@
         setTimeout(sendStartBurst, 800);
         setTimeout(sendStartBurst, 1600);
         launchCustomMatch(mIdx, hostId, matchId, true);
+      } else if (!custStartFallbackTimer) {
+        const req = { type: 'cust_start_req', from: myNetId, id: myNetId };
+        try { if (custBc) custBc.postMessage(req); } catch (e) {}
+        try { if (custMqtt && custMqtt.connected && custTopic) custMqtt.publish(custTopic, JSON.stringify(req)); } catch (e) {}
+        custStartFallbackTimer = setTimeout(() => {
+          custStartFallbackTimer = null;
+          if (matchState !== 'custom_lobby' || customRoom.started) return;
+          const h2 = getCustomHumanIds();
+          const r2 = (customRoom.readyIds || []).filter(id => h2.includes(id));
+          if (h2.length > 0 && r2.length >= h2.length) {
+            const det = computeDeterministicCustomStart(h2);
+            customRoom.started = true;
+            customRoom.startMeta = { mapIdx: det.mIdx, hostId: det.hostId, matchId: det.matchId };
+            launchCustomMatch(det.mIdx, det.hostId, det.matchId, false);
+          }
+        }, 1500);
       }
+    } else if (custStartFallbackTimer) {
+      clearTimeout(custStartFallbackTimer);
+      custStartFallbackTimer = null;
     }
   }
 
@@ -5640,7 +5675,7 @@
     document.getElementById('btn-cust-npc-mode').textContent = 'NPC追加: OFF';
     document.getElementById('btn-cust-npc-mode').classList.remove('btn-primary');
     document.getElementById('cust-pass-lbl').textContent = `[合言葉: ${pass}]`;
-    customRoom = { blue: [null,null,null,null,null], red: [null,null,null,null,null], specs: [{ id: myNetId, name: config.name }], readyIds: [], mapIdx: -1, started: false };
+    customRoom = { blue: [null,null,null,null,null], red: [null,null,null,null,null], specs: [{ id: myNetId, name: config.name }], readyIds: [], mapIdx: -1, started: false, rev: 0 };
     custTopic = `tactical6/v1/custom/${encodeURIComponent(pass.toLowerCase())}`;
     showScreen('screen-custom');
     renderCustomRoom();
@@ -5656,14 +5691,15 @@
         return;
       }
       if (d.type === 'cust_join' && !customRoom.started) {
-        if (!customRoom.blue.some(x=>x&&x.id===d.id) && !customRoom.red.some(x=>x&&x.id===d.id) && !customRoom.specs.some(s => s.id === d.id)) {
+        const isNewJoiner = !customRoom.blue.some(x=>x&&x.id===d.id) && !customRoom.red.some(x=>x&&x.id===d.id) && !customRoom.specs.some(s => s.id === d.id);
+        if (isNewJoiner) {
           customRoom.specs.push({ id: d.id, name: d.name });
+          broadcastCustomRoom(false);
         }
         if (d.ready) {
           if (!customRoom.readyIds) customRoom.readyIds = [];
           if (!customRoom.readyIds.includes(d.id)) customRoom.readyIds.push(d.id);
         }
-        broadcastCustomRoom();
         renderCustomRoom();
         tryTriggerCustomStartFromReady();
       } else if (d.type === 'cust_sync' && d.room) {
@@ -5678,6 +5714,9 @@
           return;
         }
         if (customRoom.started) return;
+        const incRev = d.room.rev || 0;
+        const curRev = customRoom.rev || 0;
+        if (incRev < curRev || (incRev === curRev && d.from > myNetId)) return;
         const wasMyReady = (customRoom.readyIds || []).includes(myNetId);
         customRoom = d.room;
         if (!customRoom.readyIds) customRoom.readyIds = [];
@@ -5757,6 +5796,8 @@
   function handleCustMatchMsg(d) {
     if (!d || d.from === myNetId || selectedMode !== 'custom') return;
     if (d.type === 'c_pstate') {
+      if (d.rn !== undefined && d.rn !== roundNum) return;
+      if (matchState === 'map_reveal' || matchState === 'round_intro') return;
       const actor = custActorsById[d.id];
       if (!actor || actor === pSelf) return;
       if (!actor.targetPos) actor.targetPos = new THREE.Vector3();
@@ -5771,6 +5812,7 @@
         actor.stats.k = d.k || 0; actor.stats.d = d.d || 0; actor.stats.a = d.a || 0; actor.stats.dmg = d.dmg || 0;
       }
     } else if (d.type === 'c_bots' && !custIsHost) {
+      if (d.rn !== undefined && d.rn !== roundNum) return;
       (d.states || []).forEach(bs => {
         const actor = custActorsById[bs.id];
         if (!actor || actor === pSelf) return;
@@ -5826,10 +5868,13 @@
     } else if (d.type === 'c_kill') {
       addKillFeed(d.killerName, d.victimName, true, !!d.hs);
     } else if (d.type === 'c_round_end' && !custIsHost) {
+      if (d.rn !== undefined && d.rn !== roundNum) return;
+      if (matchState !== 'playing') return;
       const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
       const myWon = myBlue ? d.blueWon : !d.blueWon;
       endRound(myWon, d.reason || 'ROUND END', true);
     } else if (d.type === 'c_next_round' && !custIsHost) {
+      if (d.rn !== undefined && d.rn <= roundNum) return;
       document.getElementById('round-result-top').style.display = 'none';
       setupRound();
     } else if (d.type === 'c_match_end' && !custIsHost) {
@@ -5840,6 +5885,7 @@
   }
 
   function launchCustomMatch(chosenMapIdx, hostId, matchId, keepRoomNetBriefly = false) {
+    if (custStartFallbackTimer) { clearTimeout(custStartFallbackTimer); custStartFallbackTimer = null; }
     if (customRoom._launchedMatchId && customRoom._launchedMatchId === matchId) return;
     if (matchState !== 'custom_lobby' && selectedMode === 'custom' && customRoom._launchedMatchId) return;
     customRoom._launchedMatchId = matchId || 'local';
@@ -6139,13 +6185,13 @@
     if (rAlive === 0) {
       if (selectedMode === 'custom' && custOnline && custIsHost) {
         const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
-        sendCustNet({ type: 'c_round_end', blueWon: myBlue, reason: 'TEAM ELIMINATED' });
+        sendCustNet({ type: 'c_round_end', rn: roundNum, blueWon: myBlue, reason: 'TEAM ELIMINATED' });
       }
       endRound(true, 'TEAM ELIMINATED');
     } else if (bAlive === 0) {
       if (selectedMode === 'custom' && custOnline && custIsHost) {
         const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
-        sendCustNet({ type: 'c_round_end', blueWon: !myBlue, reason: 'TEAM WIPED OUT' });
+        sendCustNet({ type: 'c_round_end', rn: roundNum, blueWon: !myBlue, reason: 'TEAM WIPED OUT' });
       }
       endRound(false, 'TEAM WIPED OUT');
     }
@@ -6526,7 +6572,14 @@
           }
           } else {
             if (selectedMode === 'custom' && custOnline) {
-              if (custIsHost) { sendCustNet({ type: 'c_next_round' }); setupRound(); }
+              if (custIsHost) {
+                const nextRn = roundNum + 1;
+                sendCustNet({ type: 'c_next_round', rn: nextRn });
+                setTimeout(() => sendCustNet({ type: 'c_next_round', rn: nextRn }), 350);
+                setupRound();
+              } else if (stateTimer <= -2.5) {
+                setupRound();
+              }
             } else {
               setupRound();
             }
@@ -6693,7 +6746,7 @@
           if (custStateAccum >= 0.05) {
             custStateAccum = 0;
             sendCustNet({
-              type: 'c_pstate', id: myNetId,
+              type: 'c_pstate', id: myNetId, rn: roundNum,
               x: +pSelf.pos.x.toFixed(2), z: +pSelf.pos.z.toFixed(2),
               yw: +pSelf.yaw.toFixed(3), pt: +pSelf.pitch.toFixed(3),
               hp: pSelf.hp, sh: pSelf.shield, un: pSelf.unit,
@@ -6709,7 +6762,7 @@
             teamAllies.forEach(a => { if (a.isNpc && a.id) states.push({ id: a.id, x: +a.pos.x.toFixed(2), z: +a.pos.z.toFixed(2), yw: +a.yaw.toFixed(3), hp: a.hp, sh: !!a.shield, un: a.unit, k: a.stats?.k||0, d: a.stats?.d||0, a: a.stats?.a||0, dmg: Math.round(a.stats?.dmg||0) }); });
             if (pEnemy.name !== 'なし' && pEnemy.isNpc && pEnemy.id) states.push({ id: pEnemy.id, x: +pEnemy.pos.x.toFixed(2), z: +pEnemy.pos.z.toFixed(2), yw: +pEnemy.yaw.toFixed(3), hp: pEnemy.hp, sh: !!pEnemy.shield, un: pEnemy.unit, k: pEnemy.kills||0, d: pEnemy.deaths||0, a: pEnemy.assists||0, dmg: Math.round(pEnemy.dmgDealt||0) });
             teamEnemies.forEach(e => { if (e.isNpc && e.id) states.push({ id: e.id, x: +e.pos.x.toFixed(2), z: +e.pos.z.toFixed(2), yw: +e.yaw.toFixed(3), hp: e.hp, sh: !!e.shield, un: e.unit, k: e.stats?.k||0, d: e.stats?.d||0, a: e.stats?.a||0, dmg: Math.round(e.stats?.dmg||0) }); });
-            if (states.length > 0) sendCustNet({ type: 'c_bots', states });
+            if (states.length > 0) sendCustNet({ type: 'c_bots', rn: roundNum, states });
           }
         }
       } else if ((!isOnlineMatch || selectedMode === 'pve') && selectedMode !== 'dm') {
