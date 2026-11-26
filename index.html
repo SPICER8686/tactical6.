@@ -1678,7 +1678,7 @@
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.autoClear = true;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0b1528);
@@ -1693,8 +1693,8 @@
   const dirLight = new THREE.DirectionalLight(0xfffdf5, 1.05);
   dirLight.position.set(28, 48, 22);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 1024;
-  dirLight.shadow.mapSize.height = 1024;
+  dirLight.shadow.mapSize.width = 768;
+  dirLight.shadow.mapSize.height = 768;
   dirLight.shadow.camera.near = 5;
   dirLight.shadow.camera.far = 120;
   const d = 48;
@@ -1845,13 +1845,13 @@
       ]
     },
     {
-      id: 1, name: 'サンセット・バザール', desc: '設計図2：白通路・黒壁・赤壁・単一青ブロックを忠実再現',
+      id: 1, name: 'サンセット・バザール', desc: '設計図2：外周ロングレーンと中央赤壁エリアを持つバザール構成',
       sky: 0xc98558, floorTex: texFloorSand, wallTex: texWallSand, accent: 0xf59e0b,
       grid: [
         '#########################',
         '##########EEEEEE#########',
         '#########EEEEEEE#########',
-        '###......VEEEEEEV....####',
+        '###.....VEEEEEEEV....####',
         '###..####EEEEEEE####.####',
         '###..#######G#######.####',
         '###..#######.#######.####',
@@ -1868,8 +1868,8 @@
         '###..####.###.#......####',
         '###.#####.....######.####',
         '###..######GG#######.####',
-        '###......VSSSSSSV....####',
-        '###......VSSSSSS#########',
+        '###.....VSSSSSSSV....####',
+        '###.....VSSSSSSS#########',
         '#########SSSSSSS#########',
         '#########SSSSSSS#########',
         '#########################'
@@ -2249,11 +2249,11 @@
       const hipPivot = new THREE.Group();
       hipPivot.position.set(xOff, 0.86, 0);
       const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.44, 0.17), matPants);
-      thigh.position.y = -0.22; thigh.castShadow = true; thigh.userData = { part: 'legs' };
+      thigh.position.y = -0.22;  thigh.userData = { part: 'legs' };
       const kneePivot = new THREE.Group();
       kneePivot.position.set(0, -0.43, 0);
       const shin = new THREE.Mesh(new THREE.BoxGeometry(0.145, 0.42, 0.16), matPants);
-      shin.position.y = -0.21; shin.castShadow = true; shin.userData = { part: 'legs' };
+      shin.position.y = -0.21;  shin.userData = { part: 'legs' };
       kneePivot.add(shin);
       hipPivot.add(thigh, kneePivot);
       hipPivot.knee = kneePivot;
@@ -2280,9 +2280,9 @@
 
     // Clean Arms & Hands gripping Rifle
     const armL = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.48, 0.125), matBody);
-    armL.position.set(-0.26, 1.24, -0.10); armL.rotation.set(-0.72, 0, -0.22); armL.castShadow = true;
+    armL.position.set(-0.26, 1.24, -0.10); armL.rotation.set(-0.72, 0, -0.22); 
     const armR = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.48, 0.125), matBody);
-    armR.position.set(0.24, 1.24, -0.12); armR.rotation.set(-0.85, 0, 0.14); armR.castShadow = true;
+    armR.position.set(0.24, 1.24, -0.12); armR.rotation.set(-0.85, 0, 0.14); 
     upperBody.add(armL, armR);
 
     // Clean Tactical Rifle
@@ -2304,7 +2304,7 @@
     head.position.set(0, 1.62, 0); head.castShadow = true;
     head.userData = { part: 'head' };
     const hair = new THREE.Mesh(new THREE.BoxGeometry(0.225, 0.07, 0.225), matHair);
-    hair.position.set(0, 1.72, 0.005); hair.castShadow = true;
+    hair.position.set(0, 1.72, 0.005); 
     upperBody.add(head, hair);
     hitboxes.push(head);
 
@@ -5126,6 +5126,9 @@
 
     const renderPips = (elId, unitIdx, cls) => {
       const el = document.getElementById(elId);
+      const key = `${unitIdx}_${cls}`;
+      if (el._lastKey === key) return;
+      el._lastKey = key;
       el.innerHTML = '';
       for (let i = 0; i < 6; i++) {
         const d = document.createElement('div');
@@ -5152,8 +5155,12 @@
         ...(pEnemy.name !== 'なし' ? [pEnemy.hp > 0] : []),
         ...teamEnemies.map(e => e.hp > 0)
       ];
-      document.getElementById('htb-blue-sq').innerHTML = Array.from({length: blueTotal}, (_, i) => `<div class="htb-sq ${blueStates[i] ? 'alive blue' : ''}"></div>`).join('');
-      document.getElementById('htb-red-sq').innerHTML = Array.from({length: redTotal}, (_, i) => `<div class="htb-sq ${redStates[i] ? 'alive red' : ''}"></div>`).join('');
+      const bHtml = Array.from({length: blueTotal}, (_, i) => `<div class="htb-sq ${blueStates[i] ? 'alive blue' : ''}"></div>`).join('');
+      const rHtml = Array.from({length: redTotal}, (_, i) => `<div class="htb-sq ${redStates[i] ? 'alive red' : ''}"></div>`).join('');
+      const bSqEl = document.getElementById('htb-blue-sq');
+      const rSqEl = document.getElementById('htb-red-sq');
+      if (bSqEl._last !== bHtml) { bSqEl._last = bHtml; bSqEl.innerHTML = bHtml; }
+      if (rSqEl._last !== rHtml) { rSqEl._last = rHtml; rSqEl.innerHTML = rHtml; }
       document.getElementById('htb-blue-score').textContent = String(selfTeamScore || 0);
       document.getElementById('htb-red-score').textContent = String(enemyTeamScore || 0);
       if (matchState === 'round_intro') {
