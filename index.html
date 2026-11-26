@@ -2575,11 +2575,7 @@
     const dist = dir.length();
     if (dist < 0.01) return true;
     dir.normalize();
-    if (getObstacleRayHitDist(from, dir, dist) >= 0) return false;
-    raycaster.set(from, dir);
-    raycaster.far = dist;
-    const hits = raycaster.intersectObjects(obstacleMeshes, false);
-    return hits.length === 0;
+    return getObstacleRayHitDist(from, dir, dist) < 0;
   }
 
   function isCellWalkableForBot(g, r, c, rows, cols, cell) {
@@ -4251,7 +4247,21 @@
           } else {
             const enemyAlive = (pEnemy.hp > 0 ? 1 : 0) + teamEnemies.filter(e => e.hp > 0).length;
             if (!isTeamMode() ? pEnemy.hp <= 0 : enemyAlive === 0) {
-              endRound(true, part === 'head' ? 'HEADSHOT (100 DMG)' : 'ELIMINATED');
+              if (selectedMode === 'custom' && custOnline) {
+                if (custIsHost) {
+                  const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
+                  endRound(true, part === 'head' ? 'HEADSHOT (100 DMG)' : 'ELIMINATED');
+                  sendCustNet({
+                    type: 'c_round_end', rn: roundNum, blueWon: myBlue,
+                    reason: part === 'head' ? 'HEADSHOT (100 DMG)' : 'ELIMINATED',
+                    blueScore: myBlue ? selfTeamScore : enemyTeamScore,
+                    redScore: myBlue ? enemyTeamScore : selfTeamScore,
+                    unitsById: getCustomUnitsById()
+                  });
+                }
+              } else {
+                endRound(true, part === 'head' ? 'HEADSHOT (100 DMG)' : 'ELIMINATED');
+              }
             }
           }
         }
@@ -5793,6 +5803,39 @@
     } catch (e) {}
   }
 
+  function getCustomUnitsById() {
+    const map = {};
+    if (!isCustomSpectator && pSelf.id) map[pSelf.id] = pSelf.unit;
+    if (pEnemy.name !== 'なし' && pEnemy.id) map[pEnemy.id] = pEnemy.unit;
+    teamAllies.forEach(a => { if (a.id) map[a.id] = a.unit; });
+    teamEnemies.forEach(e => { if (e.id) map[e.id] = e.unit; });
+    return map;
+  }
+
+  function applyCustomHostSyncState(d) {
+    const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
+    if (d.blueScore !== undefined && d.redScore !== undefined) {
+      selfTeamScore = myBlue ? d.blueScore : d.redScore;
+      enemyTeamScore = myBlue ? d.redScore : d.blueScore;
+    }
+    if (d.unitsById) {
+      if (!isCustomSpectator && pSelf.id && d.unitsById[pSelf.id] !== undefined) pSelf.unit = d.unitsById[pSelf.id];
+      if (pEnemy.id && d.unitsById[pEnemy.id] !== undefined) pEnemy.unit = d.unitsById[pEnemy.id];
+      teamAllies.forEach((a, idx) => {
+        if (a.id && d.unitsById[a.id] !== undefined) {
+          a.unit = d.unitsById[a.id];
+          allyUnits[idx] = a.unit;
+        }
+      });
+      teamEnemies.forEach((e, idx) => {
+        if (e.id && d.unitsById[e.id] !== undefined) {
+          e.unit = d.unitsById[e.id];
+          enemyUnits[idx] = e.unit;
+        }
+      });
+    }
+  }
+
   function handleCustMatchMsg(d) {
     if (!d || d.from === myNetId || selectedMode !== 'custom') return;
     if (d.type === 'c_pstate') {
@@ -5813,6 +5856,7 @@
       }
     } else if (d.type === 'c_bots' && !custIsHost) {
       if (d.rn !== undefined && d.rn !== roundNum) return;
+      if (matchState !== 'playing') return;
       (d.states || []).forEach(bs => {
         const actor = custActorsById[bs.id];
         if (!actor || actor === pSelf) return;
@@ -5869,12 +5913,17 @@
       addKillFeed(d.killerName, d.victimName, true, !!d.hs);
     } else if (d.type === 'c_round_end' && !custIsHost) {
       if (d.rn !== undefined && d.rn !== roundNum) return;
-      if (matchState !== 'playing') return;
+      if (matchState !== 'playing' && matchState !== 'round_intro') return;
+      setSpawnBarriersActive(false);
+      document.getElementById('banner-overlay').classList.remove('active', 'prep-top');
       const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
       const myWon = myBlue ? d.blueWon : !d.blueWon;
       endRound(myWon, d.reason || 'ROUND END', true);
+      applyCustomHostSyncState(d);
     } else if (d.type === 'c_next_round' && !custIsHost) {
       if (d.rn !== undefined && d.rn <= roundNum) return;
+      if (d.rn !== undefined) roundNum = d.rn;
+      applyCustomHostSyncState(d);
       document.getElementById('round-result-top').style.display = 'none';
       setupRound();
     } else if (d.type === 'c_match_end' && !custIsHost) {
@@ -6043,12 +6092,21 @@
       if (aliveT.length === 0) return;
 
       const bEye = new THREE.Vector3(bot.pos.x, EYE_HEIGHT, bot.pos.z);
-      let chosen = null, minD = Infinity, canSee = false;
-      for (const t of aliveT) {
-        const d = bot.pos.distanceTo(t.pos);
-        const vis = hasLineOfSight(bEye, new THREE.Vector3(t.pos.x, EYE_HEIGHT, t.pos.z));
-        if (vis && (!canSee || d < minD)) { chosen = t; minD = d; canSee = true; }
-        else if (!canSee && d < minD) { chosen = t; minD = d; }
+      bot._losT = (bot._losT || 0) - dt;
+      let chosen = bot._cachedTarget && bot._cachedTarget.hp > 0 ? bot._cachedTarget : null;
+      let minD = chosen ? bot.pos.distanceTo(chosen.pos) : Infinity;
+      let canSee = !!bot._cachedVis;
+      if (!chosen || bot._losT <= 0) {
+        bot._losT = 0.14;
+        chosen = null; minD = Infinity; canSee = false;
+        for (const t of aliveT) {
+          const d = bot.pos.distanceTo(t.pos);
+          const vis = hasLineOfSight(bEye, new THREE.Vector3(t.pos.x, EYE_HEIGHT, t.pos.z));
+          if (vis && (!canSee || d < minD)) { chosen = t; minD = d; canSee = true; }
+          else if (!canSee && d < minD) { chosen = t; minD = d; }
+        }
+        bot._cachedTarget = chosen;
+        bot._cachedVis = canSee;
       }
       if (!chosen) return;
       const tEye = new THREE.Vector3(chosen.pos.x, EYE_HEIGHT, chosen.pos.z);
@@ -6183,17 +6241,27 @@
     if (selectedMode === 'custom' && pEnemy.name === 'なし' && teamEnemies.length === 0) return;
     if (selectedMode === 'custom' && custOnline && !custIsHost) return;
     if (rAlive === 0) {
-      if (selectedMode === 'custom' && custOnline && custIsHost) {
-        const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
-        sendCustNet({ type: 'c_round_end', rn: roundNum, blueWon: myBlue, reason: 'TEAM ELIMINATED' });
-      }
       endRound(true, 'TEAM ELIMINATED');
-    } else if (bAlive === 0) {
       if (selectedMode === 'custom' && custOnline && custIsHost) {
         const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
-        sendCustNet({ type: 'c_round_end', rn: roundNum, blueWon: !myBlue, reason: 'TEAM WIPED OUT' });
+        sendCustNet({
+          type: 'c_round_end', rn: roundNum, blueWon: myBlue, reason: 'TEAM ELIMINATED',
+          blueScore: myBlue ? selfTeamScore : enemyTeamScore,
+          redScore: myBlue ? enemyTeamScore : selfTeamScore,
+          unitsById: getCustomUnitsById()
+        });
       }
+    } else if (bAlive === 0) {
       endRound(false, 'TEAM WIPED OUT');
+      if (selectedMode === 'custom' && custOnline && custIsHost) {
+        const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
+        sendCustNet({
+          type: 'c_round_end', rn: roundNum, blueWon: !myBlue, reason: 'TEAM WIPED OUT',
+          blueScore: myBlue ? selfTeamScore : enemyTeamScore,
+          redScore: myBlue ? enemyTeamScore : selfTeamScore,
+          unitsById: getCustomUnitsById()
+        });
+      }
     }
   }
 
@@ -6573,11 +6641,16 @@
           } else {
             if (selectedMode === 'custom' && custOnline) {
               if (custIsHost) {
-                const nextRn = roundNum + 1;
-                sendCustNet({ type: 'c_next_round', rn: nextRn });
-                setTimeout(() => sendCustNet({ type: 'c_next_round', rn: nextRn }), 350);
-                setupRound();
-              } else if (stateTimer <= -2.5) {
+                const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
+                const nrPayload = {
+                  type: 'c_next_round', rn: roundNum,
+                  blueScore: myBlue ? selfTeamScore : enemyTeamScore,
+                  redScore: myBlue ? enemyTeamScore : selfTeamScore,
+                  unitsById: getCustomUnitsById()
+                };
+                sendCustNet(nrPayload);
+                setTimeout(() => sendCustNet(nrPayload), 350);
+                setTimeout(() => sendCustNet(nrPayload), 900);
                 setupRound();
               }
             } else {
@@ -6741,9 +6814,9 @@
           while (dyaw < -Math.PI) dyaw += Math.PI * 2;
           pEnemy.yaw += dyaw * lerpF;
         }
-        if (!isCustomSpectator) {
+        if (!isCustomSpectator && (matchState === 'playing' || matchState === 'round_intro')) {
           custStateAccum += dt;
-          if (custStateAccum >= 0.05) {
+          if (custStateAccum >= 0.10) {
             custStateAccum = 0;
             sendCustNet({
               type: 'c_pstate', id: myNetId, rn: roundNum,
@@ -6754,9 +6827,9 @@
             });
           }
         }
-        if (custIsHost) {
+        if (custIsHost && matchState === 'playing') {
           custBotAccum += dt;
-          if (custBotAccum >= 0.065) {
+          if (custBotAccum >= 0.125) {
             custBotAccum = 0;
             const states = [];
             teamAllies.forEach(a => { if (a.isNpc && a.id) states.push({ id: a.id, x: +a.pos.x.toFixed(2), z: +a.pos.z.toFixed(2), yw: +a.yaw.toFixed(3), hp: a.hp, sh: !!a.shield, un: a.unit, k: a.stats?.k||0, d: a.stats?.d||0, a: a.stats?.a||0, dmg: Math.round(a.stats?.dmg||0) }); });
