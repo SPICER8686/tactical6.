@@ -4249,15 +4249,18 @@
             if (!isTeamMode() ? pEnemy.hp <= 0 : enemyAlive === 0) {
               if (selectedMode === 'custom' && custOnline) {
                 if (custIsHost) {
+                  const endedRn = roundNum;
                   const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
                   endRound(true, part === 'head' ? 'HEADSHOT (100 DMG)' : 'ELIMINATED');
-                  sendCustNet({
-                    type: 'c_round_end', rn: roundNum, blueWon: myBlue,
+                  const rePayload = {
+                    type: 'c_round_end', rn: endedRn, blueWon: myBlue,
                     reason: part === 'head' ? 'HEADSHOT (100 DMG)' : 'ELIMINATED',
                     blueScore: myBlue ? selfTeamScore : enemyTeamScore,
                     redScore: myBlue ? enemyTeamScore : selfTeamScore,
                     unitsById: getCustomUnitsById()
-                  });
+                  };
+                  sendCustNet(rePayload);
+                  setTimeout(() => sendCustNet(rePayload), 280);
                 }
               } else {
                 endRound(true, part === 'head' ? 'HEADSHOT (100 DMG)' : 'ELIMINATED');
@@ -4789,6 +4792,24 @@
         const dmgVal = isHS ? 100 : 18;
         if (aiTarget === pSelf || aiTarget.isSelf) {
           applyDamageToSelf(dmgVal, isHS ? 'head' : 'torso', pEnemy.pos);
+        } else if (selectedMode === 'custom' && custOnline && custIsHost && !aiTarget.isNpc && aiTarget.id && aiTarget.id !== myNetId) {
+          sendCustNet({
+            type: 'c_dmg', targetId: aiTarget.id, dmg: dmgVal, part: isHS ? 'head' : 'torso',
+            shooterId: pEnemy.id || '', shooterName: pEnemy.name, fx: pEnemy.pos.x, fz: pEnemy.pos.z
+          });
+          if (aiTarget.shield) {
+            aiTarget.shield = false; playSpatialSound('shieldBreak', aiTarget.pos, false);
+          } else {
+            const wasUp = aiTarget.hp > 0;
+            pEnemy.dmgDealt += dmgVal;
+            aiTarget.hp = Math.max(0, aiTarget.hp - dmgVal);
+            if (wasUp && aiTarget.hp <= 0) {
+              pEnemy.kills++;
+              if (aiTarget.stats) aiTarget.stats.d++;
+              if (aiTarget.rig) { aiTarget.rig.group.rotation.x = -Math.PI / 2; aiTarget.rig.group.position.y = 0.22; }
+              addKillFeed(pEnemy.name, aiTarget.name, false, isHS);
+            }
+          }
         } else if (aiTarget.shield) {
           aiTarget.shield = false; playSpatialSound('shieldBreak', aiTarget.pos, false);
         } else {
@@ -5479,6 +5500,8 @@
   let custActorsById = {};
   let custStateAccum = 0;
   let custBotAccum = 0;
+  let custLastEndedRn = 0;
+  let custLastStartedRn = 1;
 
   function getCustomHumanIds(room = customRoom) {
     const ids = [...(room.blue || []), ...(room.red || []), ...(room.specs || [])]
@@ -5912,8 +5935,12 @@
     } else if (d.type === 'c_kill') {
       addKillFeed(d.killerName, d.victimName, true, !!d.hs);
     } else if (d.type === 'c_round_end' && !custIsHost) {
-      if (d.rn !== undefined && d.rn !== roundNum) return;
-      if (matchState !== 'playing' && matchState !== 'round_intro') return;
+      if (d.rn !== undefined && d.rn <= custLastEndedRn) return;
+      custLastEndedRn = d.rn || roundNum;
+      if (matchState === 'round_end' || matchState === 'match_end') {
+        applyCustomHostSyncState(d);
+        return;
+      }
       setSpawnBarriersActive(false);
       document.getElementById('banner-overlay').classList.remove('active', 'prep-top');
       const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
@@ -5921,8 +5948,10 @@
       endRound(myWon, d.reason || 'ROUND END', true);
       applyCustomHostSyncState(d);
     } else if (d.type === 'c_next_round' && !custIsHost) {
-      if (d.rn !== undefined && d.rn <= roundNum) return;
-      if (d.rn !== undefined) roundNum = d.rn;
+      const targetRn = d.rn || (custLastStartedRn + 1);
+      if (targetRn <= custLastStartedRn) return;
+      custLastStartedRn = targetRn;
+      roundNum = targetRn;
       applyCustomHostSyncState(d);
       document.getElementById('round-result-top').style.display = 'none';
       setupRound();
@@ -5938,6 +5967,8 @@
     if (customRoom._launchedMatchId && customRoom._launchedMatchId === matchId) return;
     if (matchState !== 'custom_lobby' && selectedMode === 'custom' && customRoom._launchedMatchId) return;
     customRoom._launchedMatchId = matchId || 'local';
+    custLastEndedRn = 0;
+    custLastStartedRn = 1;
     customRoom.started = true;
     isCustomSpectator = customRoom.specs.some(sp => sp.id === myNetId);
     selectedMode = 'custom';
@@ -6210,6 +6241,26 @@
             if (bot.stats) bot.stats.dmg += bDmg;
             if (pSelf.hp > 0 && !pSelf.shield && pSelf.shadowT <= 0 && pSelf.hp - bDmg <= 0 && bot.stats) bot.stats.k++;
             applyDamageToSelf(bDmg, isHS ? 'head' : 'torso', bot.pos, bot.name);
+          } else if (selectedMode === 'custom' && custOnline && custIsHost && !chosen.isNpc && chosen.id && chosen.id !== myNetId) {
+            sendCustNet({
+              type: 'c_dmg', targetId: chosen.id, dmg: bDmg, part: isHS ? 'head' : 'torso',
+              shooterId: bot.id || '', shooterName: bot.name, fx: bot.pos.x, fz: bot.pos.z
+            });
+            if (chosen.shield) {
+              chosen.shield = false; playSpatialSound('shieldBreak', chosen.pos, false);
+            } else {
+              const wasUp = chosen.hp > 0;
+              if (bot.stats) bot.stats.dmg += bDmg;
+              chosen.hp = Math.max(0, chosen.hp - bDmg);
+              if (wasUp && chosen.hp <= 0) {
+                if (bot.stats) bot.stats.k++;
+                if (chosen.isMainEnemy) pEnemy.deaths++;
+                else if (chosen.stats) chosen.stats.d++;
+                if (chosen.rig) { chosen.rig.group.rotation.x = -Math.PI / 2; chosen.rig.group.position.y = 0.22; }
+                if (chosen.isMainEnemy) { enemyRig.group.rotation.x = -Math.PI / 2; enemyRig.group.position.y = 0.22; }
+                addKillFeed(bot.name, chosen.name || pEnemy.name, !isRedBot, isHS);
+              }
+            }
           } else if (chosen.shield) {
             chosen.shield = false; playSpatialSound('shieldBreak', chosen.pos, false);
           } else {
@@ -6241,26 +6292,32 @@
     if (selectedMode === 'custom' && pEnemy.name === 'なし' && teamEnemies.length === 0) return;
     if (selectedMode === 'custom' && custOnline && !custIsHost) return;
     if (rAlive === 0) {
+      const endedRn = roundNum;
       endRound(true, 'TEAM ELIMINATED');
       if (selectedMode === 'custom' && custOnline && custIsHost) {
         const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
-        sendCustNet({
-          type: 'c_round_end', rn: roundNum, blueWon: myBlue, reason: 'TEAM ELIMINATED',
+        const rePayload = {
+          type: 'c_round_end', rn: endedRn, blueWon: myBlue, reason: 'TEAM ELIMINATED',
           blueScore: myBlue ? selfTeamScore : enemyTeamScore,
           redScore: myBlue ? enemyTeamScore : selfTeamScore,
           unitsById: getCustomUnitsById()
-        });
+        };
+        sendCustNet(rePayload);
+        setTimeout(() => sendCustNet(rePayload), 280);
       }
     } else if (bAlive === 0) {
+      const endedRn = roundNum;
       endRound(false, 'TEAM WIPED OUT');
       if (selectedMode === 'custom' && custOnline && custIsHost) {
         const myBlue = !customRoom.red.some(x => x && x.id === myNetId);
-        sendCustNet({
-          type: 'c_round_end', rn: roundNum, blueWon: !myBlue, reason: 'TEAM WIPED OUT',
+        const rePayload = {
+          type: 'c_round_end', rn: endedRn, blueWon: !myBlue, reason: 'TEAM WIPED OUT',
           blueScore: myBlue ? selfTeamScore : enemyTeamScore,
           redScore: myBlue ? enemyTeamScore : selfTeamScore,
           unitsById: getCustomUnitsById()
-        });
+        };
+        sendCustNet(rePayload);
+        setTimeout(() => sendCustNet(rePayload), 280);
       }
     }
   }
