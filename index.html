@@ -98,11 +98,8 @@
     color: #fff; border-radius: 6px; padding: 2px 8px; font-size: 16px; width: 130px;
     user-select: text; -webkit-user-select: text; touch-action: manipulation;
   }
-  .rank-badge {
-    padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800;
-    background: rgba(56, 189, 248, 0.18); border: 1px solid rgba(56, 189, 248, 0.45);
-    color: #bae6fd;
-  }
+  .rank-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:800; background:rgba(250,204,21,0.14); border:1px solid rgba(250,204,21,0.45); color:#fde047; cursor:pointer; transition:transform 0.15s, box-shadow 0.15s; }
+  .rank-badge:hover { transform:translateY(-1px); box-shadow:0 0 12px rgba(250,204,21,0.28); }
   .lobby-grid {
     display: grid; grid-template-columns: 1.15fr 1fr; gap: 12px; flex: 1; min-height: 0;
   }
@@ -506,8 +503,9 @@
         <div class="player-pill">
           <span>プレイヤー名:</span>
           <input id="input-player-name" type="text" maxlength="14" value="PLAYER1">
-          <span id="lobby-rank-badge" class="rank-badge">アイアン 0pt</span>
-          <span id="lobby-record-badge" class="rank-badge" style="background:rgba(56,189,248,0.14);border-color:rgba(56,189,248,0.45);color:#7dd3fc;">0勝0敗 (K/D 0.00)</span>
+          <span id="lobby-rank-badge" class="rank-badge" title="クリックで全ランク一覧を表示">アイアン 0pt</span>
+          <span id="lobby-record-badge" class="rank-badge" style="background:rgba(56,189,248,0.14);border-color:rgba(56,189,248,0.45);color:#7dd3fc;cursor:default;">0勝0敗 (K/D 0.00)</span>
+          <a id="btn-other-games" class="btn btn-sm" href="https://spicer8686.github.io/storage./" target="_blank" rel="noopener noreferrer" style="text-decoration:none;background:rgba(99,102,241,0.22);border-color:rgba(129,140,248,0.65);color:#e0e7ff;">🎮 ほかのゲーム</a>
           <button class="btn btn-sm" id="btn-open-settings">⚙ 設定</button>
         </div>
       </div>
@@ -544,7 +542,6 @@
               <span style="font-size:11px;font-weight:700;color:#94a3b8;">モード:</span>
               <button class="btn btn-sm btn-primary onl-sub-btn active" data-sub="random">ランダム (1v1)</button>
               <button class="btn btn-sm onl-sub-btn" data-sub="rank">ランク (1v1)</button>
-              <button class="btn btn-sm onl-sub-btn" data-sub="dm">デスマッチ</button>
             </div>
             <div id="onl-desc" style="font-size:11px;color:#94a3b8;">
               ランダムマッチで待機中のプレイヤーと1v1（6機ルール）で対戦します。
@@ -596,6 +593,17 @@
         <div style="font-size:17px;font-weight:900;color:#38bdf8;">マップ投票 — 残り <span id="mv-timer">8</span>秒</div>
         <div style="font-size:11px;color:#94a3b8;">最多得票のマップで対戦します（同率の場合はランダム決定）</div>
         <div id="mv-cards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:4px;"></div>
+      </div>
+    </div>
+
+    <!-- RANK TIERS MODAL -->
+    <div id="screen-ranks" class="screen">
+      <div class="modal-box" style="width:min(640px,95%);">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(148,163,184,0.2);padding-bottom:8px;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:900;color:#fde047;">🏆 ランク一覧 (各200ptで昇格)</div>
+          <button class="btn btn-sm btn-primary" id="btn-close-ranks">閉じる</button>
+        </div>
+        <div id="rank-tiers-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;"></div>
       </div>
     </div>
 
@@ -986,6 +994,47 @@
     candidates.sort((a, b) => (a?.updatedAt || 0) - (b?.updatedAt || 0));
     candidates.forEach(c => mergeSavedConfig(c));
   })();
+
+  const RANK_META = [
+    { name: 'アイアン',     col: '#94a3b8', dark: '#334155', glow: 'rgba(148,163,184,0.35)' },
+    { name: 'ブロンズ',     col: '#d97706', dark: '#78350f', glow: 'rgba(217,119,6,0.40)' },
+    { name: 'シルバー',     col: '#e2e8f0', dark: '#475569', glow: 'rgba(226,232,240,0.45)' },
+    { name: 'ゴールド',     col: '#facc15', dark: '#854d0e', glow: 'rgba(250,204,21,0.50)' },
+    { name: 'プラチナ',     col: '#22d3ee', dark: '#155e75', glow: 'rgba(34,211,238,0.55)' },
+    { name: 'ダイヤ',       col: '#60a5fa', dark: '#1e3a8a', glow: 'rgba(96,165,250,0.60)' },
+    { name: 'エメラルド',   col: '#34d399', dark: '#065f46', glow: 'rgba(52,211,153,0.60)' },
+    { name: 'マスター',     col: '#c084fc', dark: '#581c87', glow: 'rgba(192,132,252,0.65)' },
+    { name: 'イモータル',   col: '#f87171', dark: '#7f1d1d', glow: 'rgba(248,113,113,0.70)' },
+    { name: 'チャンピオン', col: '#fde047', dark: '#991b1b', glow: 'rgba(253,224,71,0.80)' }
+  ];
+
+  function getRankIconSvg(idx, size = 18) {
+    const i = Math.max(0, Math.min(RANK_META.length - 1, idx || 0));
+    const m = RANK_META[i];
+    let inner = '';
+    if (i === 0) {
+      inner = `<polygon points="12,3 20,7 19,16 12,21 5,16 4,7" fill="${m.dark}" stroke="${m.col}" stroke-width="1.8"/><circle cx="12" cy="12" r="2.6" fill="${m.col}"/>`;
+    } else if (i === 1) {
+      inner = `<polygon points="12,2 20,7 18,17 12,22 6,17 4,7" fill="${m.dark}" stroke="${m.col}" stroke-width="1.8"/><polyline points="8,11 12,15 16,11" fill="none" stroke="${m.col}" stroke-width="2.2" stroke-linecap="round"/>`;
+    } else if (i === 2) {
+      inner = `<polygon points="12,2 21,8 19,17 12,22 5,17 3,8" fill="${m.dark}" stroke="${m.col}" stroke-width="1.8"/><polygon points="12,6 16,12 12,17 8,12" fill="${m.col}"/>`;
+    } else if (i === 3) {
+      inner = `<polygon points="12,2 16,6 21,6 19,16 12,22 5,16 3,6 8,6" fill="${m.dark}" stroke="${m.col}" stroke-width="1.8"/><polygon points="12,7 15,12 12,17 9,12" fill="${m.col}"/>`;
+    } else if (i === 4) {
+      inner = `<polygon points="12,2 21,9 18,19 12,22 6,19 3,9" fill="${m.dark}" stroke="${m.col}" stroke-width="1.8"/><polygon points="12,5 14,10 19,12 14,14 12,19 10,14 5,12 10,10" fill="${m.col}"/>`;
+    } else if (i === 5) {
+      inner = `<polygon points="12,2 21,10 12,22 3,10" fill="${m.dark}" stroke="${m.col}" stroke-width="1.8"/><polygon points="12,5 17,10 12,18 7,10" fill="${m.col}" opacity="0.85"/><line x1="3" y1="10" x2="21" y2="10" stroke="#fff" stroke-width="1" opacity="0.65"/>`;
+    } else if (i === 6) {
+      inner = `<polygon points="12,2 19,6 21,14 12,22 3,14 5,6" fill="${m.dark}" stroke="${m.col}" stroke-width="1.8"/><polygon points="12,5 16,9 16,14 12,18 8,14 8,9" fill="${m.col}"/><circle cx="12" cy="11.5" r="2" fill="#ecfdf5"/>`;
+    } else if (i === 7) {
+      inner = `<path d="M2,7 L7,9 L12,3 L17,9 L22,7 L19,17 L12,22 L5,17 Z" fill="${m.dark}" stroke="${m.col}" stroke-width="1.8"/><polygon points="12,7 15.5,12 12,17 8.5,12" fill="${m.col}"/><circle cx="12" cy="12" r="2" fill="#f3e8ff"/>`;
+    } else if (i === 8) {
+      inner = `<path d="M2,5 L8,9 L12,2 L16,9 L22,5 L20,16 L12,22 L4,16 Z" fill="${m.dark}" stroke="${m.col}" stroke-width="1.8"/><polygon points="12,6 15,12 12,18 9,12" fill="${m.col}"/><polygon points="12,9 14,12 12,15 10,12" fill="#fff"/>`;
+    } else {
+      inner = `<path d="M2,5 L7,8 L12,2 L17,8 L22,5 L20,16 L12,22 L4,16 Z" fill="${m.dark}" stroke="${m.col}" stroke-width="1.9"/><polygon points="12,5 16,11 12,18 8,11" fill="#fde047"/><circle cx="12" cy="11" r="2.4" fill="#fff"/><circle cx="12" cy="2" r="1.4" fill="#fde047"/>`;
+    }
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="flex-shrink:0;filter:drop-shadow(0 0 4px ${m.glow});">${inner}</svg>`;
+  }
 
   function getRankText(idx, pts) {
     return `${RANKS[Math.max(0, Math.min(RANKS.length - 1, idx))]} ${pts}pt`;
@@ -5339,7 +5388,13 @@
 
   // ==================== SETTINGS & LOBBY EVENTS ====================
   function updateLobbyRankBadge() {
-    document.getElementById('lobby-rank-badge').textContent = getRankText(config.rankIndex, config.rankPoints);
+    const rb = document.getElementById('lobby-rank-badge');
+    const rm = RANK_META[config.rankIndex] || RANK_META[0];
+    rb.innerHTML = `${getRankIconSvg(config.rankIndex, 18)}<span>${getRankText(config.rankIndex, config.rankPoints)}</span>`;
+    rb.style.borderColor = rm.col;
+    rb.style.color = rm.col;
+    rb.style.background = 'rgba(15,23,42,0.75)';
+    rb.style.boxShadow = `0 0 10px ${rm.glow}`;
     const st = config.stats || DEFAULT_STATS;
     const kd = (st.deaths || 0) > 0 ? (st.kills / st.deaths).toFixed(2) : (st.kills || 0).toFixed(2);
     const recEl = document.getElementById('lobby-record-badge');
@@ -5351,6 +5406,23 @@
     }
   }
   updateLobbyRankBadge();
+
+  document.getElementById('lobby-rank-badge').addEventListener('click', () => {
+    const grid = document.getElementById('rank-tiers-grid');
+    grid.innerHTML = RANK_META.map((m, idx) => {
+      const isCur = idx === config.rankIndex;
+      const isUnlocked = idx <= config.rankIndex;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:${isCur ? 'rgba(30,41,59,0.95)' : 'rgba(15,23,42,0.72)'};border:1px solid ${isCur ? m.col : 'rgba(148,163,184,0.22)'};opacity:${isUnlocked ? '1' : '0.68'};">
+        ${getRankIconSvg(idx, 28)}
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:900;color:${m.col};">${idx + 1}. ${m.name}${isCur ? ' <span style="font-size:10px;color:#fff;background:rgba(56,189,248,0.28);padding:1px 6px;border-radius:999px;margin-left:4px;">現在</span>' : ''}</div>
+          <div style="font-size:10px;color:#94a3b8;">${isCur ? `${config.rankPoints} / 200 pt` : (idx === RANK_META.length - 1 ? '最高ランク (0〜200 pt)' : '200 pt で次ランクへ昇格')}</div>
+        </div>
+      </div>`;
+    }).join('');
+    showScreen('screen-ranks');
+  });
+  document.getElementById('btn-close-ranks').addEventListener('click', () => showScreen('screen-lobby'));
 
   function applyLoadedConfigToUI() {
     document.getElementById('input-player-name').value = config.name;
@@ -5430,8 +5502,7 @@
       onlSubRule = b.dataset.sub;
       const descs = {
         random: 'ランダムマッチで待機中のプレイヤーと1v1（6機ルール）で対戦します。',
-        rank: 'ランクマッチ（1v1・6ゲーム先取・アイアン〜チャンピオン各200pt）。',
-        dm: '15人デスマッチ（10秒で集まらない場合はNPCで穴埋めして強制開始）。'
+        rank: 'ランクマッチ（1v1・6ゲーム先取・アイアン〜チャンピオン各200pt）。'
       };
       document.getElementById('onl-desc').textContent = descs[onlSubRule];
     });
@@ -5718,8 +5789,8 @@
       else { selectedMode = 'npc'; teamFormat = npcSubRule; startNewMatch(false); }
     } else if (mainCategory === 'online') {
       teamFormat = '1v1';
-      if (onlSubRule === 'dm') { selectedMode = 'dm'; startMatchmaking('dm_online'); }
-      else { selectedMode = onlSubRule; startMatchmaking(onlSubRule); }
+      selectedMode = (onlSubRule === 'rank') ? 'rank' : 'random';
+      startMatchmaking(selectedMode);
     } else {
       const pass = (document.getElementById('input-passphrase').value || '').trim();
       if (!pass) { document.getElementById('input-passphrase').focus(); return; }
