@@ -518,7 +518,7 @@
           <div class="mode-tabs" id="mode-tabs" style="grid-template-columns:repeat(3,1fr);">
             <div class="mode-tab active" data-cat="npc">NPC</div>
             <div class="mode-tab" data-cat="online">オンライン</div>
-            <div class="mode-tab" data-cat="custom">カスタム</div>
+            <div class="mode-tab" data-cat="friend">フレンド</div>
           </div>
 
           <!-- NPC PANEL -->
@@ -542,24 +542,19 @@
           <div id="cat-panel-online" class="mode-panel" style="display:none;">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
               <span style="font-size:11px;font-weight:700;color:#94a3b8;">モード:</span>
-              <button class="btn btn-sm btn-primary onl-sub-btn active" data-sub="random">ランダム</button>
-              <button class="btn btn-sm onl-sub-btn" data-sub="rank">ランク</button>
+              <button class="btn btn-sm btn-primary onl-sub-btn active" data-sub="random">ランダム (1v1)</button>
+              <button class="btn btn-sm onl-sub-btn" data-sub="rank">ランク (1v1)</button>
               <button class="btn btn-sm onl-sub-btn" data-sub="dm">デスマッチ</button>
             </div>
-            <div id="onl-fmt-row" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
-              <span style="font-size:11px;font-weight:700;color:#94a3b8;">形式:</span>
-              <button class="btn btn-sm btn-primary fmt-btn active" data-fmt="1v1">1v1 (6機)</button>
-              <button class="btn btn-sm fmt-btn" data-fmt="5v5">5v5 (チーム)</button>
-            </div>
             <div id="onl-desc" style="font-size:11px;color:#94a3b8;">
-              ランダムマッチで待機中のプレイヤーと対戦します。
+              ランダムマッチで待機中のプレイヤーと1v1（6機ルール）で対戦します。
             </div>
           </div>
 
-          <!-- CUSTOM PANEL -->
-          <div id="cat-panel-custom" class="mode-panel" style="display:none;">
+          <!-- FRIEND PANEL -->
+          <div id="cat-panel-friend" class="mode-panel" style="display:none;">
             <div style="font-size:11px;color:#cbd5e1;margin-bottom:6px;">
-              合言葉でカスタム設定画面に集合します（試合開始前なら途中参加OK／開始後は参加不可）。
+              同じ合言葉を入力したフレンドとオンライン1v1（6機ルール）で対戦します。
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <input id="input-passphrase" type="text" placeholder="合言葉 (例: room77)" maxlength="20"
@@ -591,40 +586,6 @@
         <div style="display:flex;gap:8px;justify-content:center;margin-top:6px;">
           <button class="btn btn-sm" id="btn-mm-instant" style="display:none;">今すぐ模擬対戦で開始</button>
           <button class="btn btn-danger btn-sm" id="btn-mm-cancel">キャンセル</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- CUSTOM ROOM LOBBY SCREEN -->
-    <div id="screen-custom" class="screen">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
-        <div style="font-size:16px;font-weight:900;color:#38bdf8;">カスタムルーム <span id="cust-pass-lbl" style="color:#facc15;font-size:13px;"></span></div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <select id="cust-map-select" style="background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;">
-            <option value="-1">マップ: ランダム</option>
-            <option value="0">マップ: アルカディア</option>
-            <option value="1">マップ: サンセット・バザール</option>
-            <option value="2">マップ: フロスト・ドック</option>
-            <option value="3">マップ: ネオン・ラボ</option>
-          </select>
-          <button class="btn btn-sm" id="btn-cust-npc-mode">NPC追加: OFF</button>
-          <button class="btn btn-sm" id="btn-cust-spec">観戦へ</button>
-          <button class="btn btn-sm btn-primary" id="btn-cust-start">試合開始</button>
-          <button class="btn btn-sm btn-danger" id="btn-cust-leave">退出</button>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 0.85fr;gap:8px;flex:1;min-height:0;">
-        <div class="card" style="border-color:rgba(56,189,248,0.5);">
-          <h3 style="color:#38bdf8;">Aチーム (BLUE)</h3>
-          <div id="cust-blue-slots" style="display:flex;flex-direction:column;gap:5px;"></div>
-        </div>
-        <div class="card" style="border-color:rgba(248,113,113,0.5);">
-          <h3 style="color:#f87171;">Bチーム (RED)</h3>
-          <div id="cust-red-slots" style="display:flex;flex-direction:column;gap:5px;"></div>
-        </div>
-        <div class="card">
-          <h3>観戦者 (幽霊視点)</h3>
-          <div id="cust-spec-list" style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:#cbd5e1;"></div>
         </div>
       </div>
     </div>
@@ -3120,6 +3081,7 @@
   }
 
   function startMatchmaking(mode) {
+    teamFormat = '1v1';
     cleanupNetwork();
     closeCustomMatchNet();
     matchState = 'matchmaking';
@@ -5466,10 +5428,9 @@
       document.querySelectorAll('.onl-sub-btn').forEach(x => x.classList.remove('active', 'btn-primary'));
       b.classList.add('active', 'btn-primary');
       onlSubRule = b.dataset.sub;
-      document.getElementById('onl-fmt-row').style.display = onlSubRule === 'dm' ? 'none' : 'flex';
       const descs = {
-        random: 'ランダムマッチで待機中のプレイヤーと対戦します。',
-        rank: 'ランクマッチ（6ゲーム先取・アイアン〜チャンピオン各200pt）。',
+        random: 'ランダムマッチで待機中のプレイヤーと1v1（6機ルール）で対戦します。',
+        rank: 'ランクマッチ（1v1・6ゲーム先取・アイアン〜チャンピオン各200pt）。',
         dm: '15人デスマッチ（10秒で集まらない場合はNPCで穴埋めして強制開始）。'
       };
       document.getElementById('onl-desc').textContent = descs[onlSubRule];
@@ -5567,270 +5528,6 @@
       if (customRoom.red[i] && customRoom.red[i].id === myNetId) customRoom.red[i] = null;
     }
     customRoom.specs = customRoom.specs.filter(s => s.id !== myNetId);
-  }
-
-  function renderCustomRoom() {
-    const renderTeam = (elId, arr, teamKey) => {
-      const el = document.getElementById(elId);
-      el.innerHTML = '';
-      for (let i = 0; i < 5; i++) {
-        const slot = arr[i];
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,0.8);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;min-height:28px;';
-        if (slot) {
-          const isRdy = !slot.isNpc && (customRoom.readyIds || []).includes(slot.id);
-          row.innerHTML = `<span style="font-weight:800;color:${teamKey==='blue'?'#38bdf8':'#f87171'};">${slot.name}${slot.isNpc ? ' [NPC]' : (isRdy ? ' <span style="color:#4ade80;">✓</span>' : '')}</span>`;
-          if (slot.isNpc || slot.id === myNetId) {
-            const rm = document.createElement('button');
-            rm.className = 'btn btn-sm'; rm.textContent = '×'; rm.style.padding = '1px 6px';
-            rm.onclick = () => { arr[i] = null; if (slot.id === myNetId) customRoom.specs.push({ id: myNetId, name: config.name }); broadcastCustomRoom(); renderCustomRoom(); };
-            row.appendChild(rm);
-          }
-        } else {
-          const plus = document.createElement('button');
-          plus.className = 'btn btn-sm';
-          plus.style.cssText = 'width:100%;padding:2px;font-weight:900;color:#94a3b8;';
-          plus.textContent = customAddNpcMode ? '+ NPC追加' : '+ 参加';
-          plus.onclick = () => {
-            if (customRoom.started) return;
-            if (customAddNpcMode) {
-              arr[i] = { id: 'npc_' + Math.random().toString(36).slice(2,7), name: `${teamKey.toUpperCase()}-NPC${i+1}`, isNpc: true };
-            } else {
-              removeSelfFromCustomSlots();
-              arr[i] = { id: myNetId, name: config.name, isNpc: false };
-            }
-            broadcastCustomRoom();
-            renderCustomRoom();
-          };
-          row.appendChild(plus);
-        }
-        el.appendChild(row);
-      }
-    };
-    const humanIds = getCustomHumanIds();
-    customRoom.readyIds = (customRoom.readyIds || []).filter(id => humanIds.includes(id));
-    renderTeam('cust-blue-slots', customRoom.blue, 'blue');
-    renderTeam('cust-red-slots', customRoom.red, 'red');
-    const specEl = document.getElementById('cust-spec-list');
-    specEl.innerHTML = '';
-    if (customRoom.specs.length === 0) {
-      specEl.innerHTML = '<div style="color:#64748b;">なし</div>';
-    } else {
-      customRoom.specs.forEach(sp => {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:4px;';
-        const rdy = (customRoom.readyIds || []).includes(sp.id) ? ' <span style="color:#4ade80;font-weight:800;">✓準備OK</span>' : '';
-        row.innerHTML = `<span>👁 ${sp.name}${rdy}</span>`;
-        if (sp.id !== myNetId) {
-          const kick = document.createElement('button');
-          kick.className = 'btn btn-sm'; kick.textContent = '×'; kick.style.padding = '0 5px';
-          kick.title = '退出させる';
-          kick.onclick = () => {
-            customRoom.specs = customRoom.specs.filter(x => x.id !== sp.id);
-            customRoom.readyIds = (customRoom.readyIds || []).filter(id => id !== sp.id);
-            broadcastCustomRoom(); renderCustomRoom(); tryTriggerCustomStartFromReady();
-          };
-          row.appendChild(kick);
-        }
-        specEl.appendChild(row);
-      });
-    }
-    document.getElementById('cust-map-select').value = String(customRoom.mapIdx);
-    const n = customRoom.readyIds.length;
-    const m = humanIds.length;
-    const startBtn = document.getElementById('btn-cust-start');
-    if (startBtn) {
-      const iAmReady = customRoom.readyIds.includes(myNetId);
-      if (n > 0 && n < m) {
-        startBtn.textContent = `待機中（${n}/${m}）`;
-        startBtn.classList.toggle('btn-primary', !iAmReady);
-      } else {
-        startBtn.textContent = m > 1 ? `試合開始 (${n}/${m})` : '試合開始';
-        startBtn.classList.add('btn-primary');
-      }
-    }
-  }
-
-  let custHbTimer = null;
-  function computeDeterministicCustomStart(humanIds) {
-    const sorted = humanIds.slice().sort();
-    const matchId = encodeURIComponent((custTopic || 'c') + '_' + sorted.join('_'));
-    let mIdx = (Number.isInteger(customRoom.mapIdx) && customRoom.mapIdx >= 0 && customRoom.mapIdx < MAPS.length) ? customRoom.mapIdx : -1;
-    if (mIdx < 0) {
-      let h = 0;
-      for (let i = 0; i < matchId.length; i++) h = ((h * 31) + matchId.charCodeAt(i)) >>> 0;
-      mIdx = h % MAPS.length;
-    }
-    return { hostId: sorted[0], mIdx, matchId };
-  }
-
-  function tryTriggerCustomStartFromReady() {
-    if (customRoom.started) return;
-    const humanIds = getCustomHumanIds();
-    const ready = (customRoom.readyIds || []).filter(id => humanIds.includes(id));
-    if (humanIds.length > 0 && ready.length >= humanIds.length) {
-      const { hostId, mIdx, matchId } = computeDeterministicCustomStart(humanIds);
-      if (hostId === myNetId) {
-        if (custStartFallbackTimer) { clearTimeout(custStartFallbackTimer); custStartFallbackTimer = null; }
-        customRoom.started = true;
-        customRoom.startMeta = { mapIdx: mIdx, hostId, matchId };
-        const startPayload = { type: 'cust_start', from: myNetId, mapIdx: mIdx, room: customRoom, hostId, matchId };
-        const sendStartBurst = () => {
-          try { if (custMqtt && custMqtt.connected && custTopic) custMqtt.publish(custTopic, JSON.stringify(startPayload)); } catch (e) {}
-          try { if (custBc) custBc.postMessage(startPayload); } catch (e) {}
-        };
-        sendStartBurst();
-        setTimeout(sendStartBurst, 300);
-        setTimeout(sendStartBurst, 800);
-        setTimeout(sendStartBurst, 1600);
-        launchCustomMatch(mIdx, hostId, matchId, true);
-      } else if (!custStartFallbackTimer) {
-        const req = { type: 'cust_start_req', from: myNetId, id: myNetId };
-        try { if (custBc) custBc.postMessage(req); } catch (e) {}
-        try { if (custMqtt && custMqtt.connected && custTopic) custMqtt.publish(custTopic, JSON.stringify(req)); } catch (e) {}
-        custStartFallbackTimer = setTimeout(() => {
-          custStartFallbackTimer = null;
-          if (matchState !== 'custom_lobby' || customRoom.started) return;
-          const h2 = getCustomHumanIds();
-          const r2 = (customRoom.readyIds || []).filter(id => h2.includes(id));
-          if (h2.length > 0 && r2.length >= h2.length) {
-            const det = computeDeterministicCustomStart(h2);
-            customRoom.started = true;
-            customRoom.startMeta = { mapIdx: det.mIdx, hostId: det.hostId, matchId: det.matchId };
-            launchCustomMatch(det.mIdx, det.hostId, det.matchId, false);
-          }
-        }, 1500);
-      }
-    } else if (custStartFallbackTimer) {
-      clearTimeout(custStartFallbackTimer);
-      custStartFallbackTimer = null;
-    }
-  }
-
-  function enterCustomLobby(pass) {
-    closeCustomRoomNet();
-    closeCustomMatchNet();
-    matchState = 'custom_lobby';
-    customAddNpcMode = false;
-    document.getElementById('btn-cust-npc-mode').textContent = 'NPC追加: OFF';
-    document.getElementById('btn-cust-npc-mode').classList.remove('btn-primary');
-    document.getElementById('cust-pass-lbl').textContent = `[合言葉: ${pass}]`;
-    customRoom = { blue: [null,null,null,null,null], red: [null,null,null,null,null], specs: [{ id: myNetId, name: config.name }], readyIds: [], mapIdx: -1, started: false, rev: 0 };
-    custTopic = `tactical6/v1/custom/${encodeURIComponent(pass.toLowerCase())}`;
-    showScreen('screen-custom');
-    renderCustomRoom();
-
-    const handleCustMsg = (d) => {
-      if (!d || d.from === myNetId) return;
-      if ((d.type === 'cust_join' || d.type === 'cust_ready' || d.type === 'cust_start_req') && customRoom.started && customRoom.startMeta && customRoom.startMeta.hostId === myNetId) {
-        if (getCustomHumanIds(customRoom).includes(d.id || d.from)) {
-          const sp = { type: 'cust_start', from: myNetId, mapIdx: customRoom.startMeta.mapIdx, room: customRoom, hostId: customRoom.startMeta.hostId, matchId: customRoom.startMeta.matchId };
-          try { if (custMqtt && custMqtt.connected && custTopic) custMqtt.publish(custTopic, JSON.stringify(sp)); } catch (e) {}
-          try { if (custBc) custBc.postMessage(sp); } catch (e) {}
-        }
-        return;
-      }
-      if (d.type === 'cust_join' && !customRoom.started) {
-        const isNewJoiner = !customRoom.blue.some(x=>x&&x.id===d.id) && !customRoom.red.some(x=>x&&x.id===d.id) && !customRoom.specs.some(s => s.id === d.id);
-        if (isNewJoiner) {
-          customRoom.specs.push({ id: d.id, name: d.name });
-          broadcastCustomRoom(false);
-        }
-        if (d.ready) {
-          if (!customRoom.readyIds) customRoom.readyIds = [];
-          if (!customRoom.readyIds.includes(d.id)) customRoom.readyIds.push(d.id);
-        }
-        renderCustomRoom();
-        tryTriggerCustomStartFromReady();
-      } else if (d.type === 'cust_sync' && d.room) {
-        if (d.room.started && !customRoom.started) {
-          const inRoom = getCustomHumanIds(d.room).includes(myNetId);
-          if (inRoom && d.room.startMeta) {
-            customRoom = d.room;
-            launchCustomMatch(d.room.startMeta.mapIdx, d.room.startMeta.hostId, d.room.startMeta.matchId, false);
-          } else {
-            document.getElementById('cust-pass-lbl').textContent = `[合言葉: ${pass}] — 試合開始済みのため参加不可`;
-          }
-          return;
-        }
-        if (customRoom.started) return;
-        const incRev = d.room.rev || 0;
-        const curRev = customRoom.rev || 0;
-        if (incRev < curRev || (incRev === curRev && d.from > myNetId)) return;
-        const wasMyReady = (customRoom.readyIds || []).includes(myNetId);
-        customRoom = d.room;
-        if (!customRoom.readyIds) customRoom.readyIds = [];
-        if (wasMyReady) {
-          if (!customRoom.readyIds.includes(myNetId)) customRoom.readyIds.push(myNetId);
-        } else {
-          customRoom.readyIds = customRoom.readyIds.filter(id => id !== myNetId);
-        }
-        if (!customRoom.blue.some(x=>x&&x.id===myNetId) && !customRoom.red.some(x=>x&&x.id===myNetId) && !customRoom.specs.some(x=>x.id===myNetId)) {
-          customRoom.specs.push({ id: myNetId, name: config.name });
-        }
-        renderCustomRoom();
-        tryTriggerCustomStartFromReady();
-      } else if (d.type === 'cust_leave' && d.id) {
-        for (let i = 0; i < 5; i++) {
-          if (customRoom.blue[i] && customRoom.blue[i].id === d.id) customRoom.blue[i] = null;
-          if (customRoom.red[i] && customRoom.red[i].id === d.id) customRoom.red[i] = null;
-        }
-        customRoom.specs = customRoom.specs.filter(s => s.id !== d.id);
-        customRoom.readyIds = (customRoom.readyIds || []).filter(id => id !== d.id);
-        renderCustomRoom();
-        tryTriggerCustomStartFromReady();
-      } else if (d.type === 'cust_ready' && d.id && !customRoom.started) {
-        if (!customRoom.readyIds) customRoom.readyIds = [];
-        if (d.ready) { if (!customRoom.readyIds.includes(d.id)) customRoom.readyIds.push(d.id); }
-        else { customRoom.readyIds = customRoom.readyIds.filter(id => id !== d.id); }
-        renderCustomRoom();
-        tryTriggerCustomStartFromReady();
-      } else if (d.type === 'cust_start') {
-        if (d.room) customRoom = d.room;
-        launchCustomMatch(d.mapIdx, d.hostId, d.matchId, false);
-      }
-    };
-
-    try {
-      if (typeof BroadcastChannel !== 'undefined') {
-        custBc = new BroadcastChannel(custTopic);
-        custBc.onmessage = ev => handleCustMsg(ev.data);
-        custBc.postMessage({ type: 'cust_join', from: myNetId, id: myNetId, name: config.name, ready: false });
-      }
-    } catch (e) {}
-
-    try {
-      if (typeof mqtt !== 'undefined') {
-        custMqtt = mqtt.connect(BROKERS[0], { clientId: 't6c_' + myNetId, clean: true, connectTimeout: 5000 });
-        custMqtt.on('connect', () => {
-          custMqtt.subscribe(custTopic);
-          const rdy = (customRoom.readyIds || []).includes(myNetId);
-          custMqtt.publish(custTopic, JSON.stringify({ type: 'cust_join', from: myNetId, id: myNetId, name: config.name, ready: rdy }));
-        });
-        custHbTimer = setInterval(() => {
-          if (matchState !== 'custom_lobby' || customRoom.started) return;
-          const rdy = (customRoom.readyIds || []).includes(myNetId);
-          const hb = { type: 'cust_join', from: myNetId, id: myNetId, name: config.name, ready: rdy };
-          try { if (custBc) custBc.postMessage(hb); } catch (e) {}
-          try { if (custMqtt && custMqtt.connected && custTopic) custMqtt.publish(custTopic, JSON.stringify(hb)); } catch (e) {}
-          const hIds = getCustomHumanIds();
-          const rIds = (customRoom.readyIds || []).filter(id => hIds.includes(id));
-          if (hIds.length > 0 && rIds.length >= hIds.length) {
-            const hId = hIds.slice().sort()[0];
-            if (hId !== myNetId) {
-              const req = { type: 'cust_start_req', from: myNetId, id: myNetId };
-              try { if (custBc) custBc.postMessage(req); } catch (e) {}
-              try { if (custMqtt && custMqtt.connected && custTopic) custMqtt.publish(custTopic, JSON.stringify(req)); } catch (e) {}
-            } else {
-              tryTriggerCustomStartFromReady();
-            }
-          }
-        }, 1200);
-        custMqtt.on('message', (_, raw) => {
-          try { handleCustMsg(JSON.parse(raw.toString())); } catch (e) {}
-        });
-      }
-    } catch (e) {}
   }
 
   function getCustomUnitsById() {
@@ -6013,50 +5710,6 @@
     }
   }
 
-  document.getElementById('btn-cust-npc-mode').addEventListener('click', e => {
-    customAddNpcMode = !customAddNpcMode;
-    e.target.textContent = customAddNpcMode ? 'NPC追加: ON' : 'NPC追加: OFF';
-    e.target.classList.toggle('btn-primary', customAddNpcMode);
-    renderCustomRoom();
-  });
-  document.getElementById('btn-cust-spec').addEventListener('click', () => {
-    if (customRoom.started) return;
-    removeSelfFromCustomSlots();
-    customRoom.specs.push({ id: myNetId, name: config.name });
-    broadcastCustomRoom();
-    renderCustomRoom();
-  });
-  document.getElementById('cust-map-select').addEventListener('change', e => {
-    customRoom.mapIdx = parseInt(e.target.value, 10);
-    broadcastCustomRoom();
-  });
-  document.getElementById('btn-cust-start').addEventListener('click', () => {
-    if (customRoom.started) return;
-    if (!customRoom.readyIds) customRoom.readyIds = [];
-    const idx = customRoom.readyIds.indexOf(myNetId);
-    const nowReady = idx < 0;
-    if (nowReady) customRoom.readyIds.push(myNetId);
-    else customRoom.readyIds.splice(idx, 1);
-    const rdyMsg = { type: 'cust_ready', from: myNetId, id: myNetId, ready: nowReady };
-    try { if (custBc) custBc.postMessage(rdyMsg); } catch (e) {}
-    try { if (custMqtt && custMqtt.connected && custTopic) custMqtt.publish(custTopic, JSON.stringify(rdyMsg)); } catch (e) {}
-    renderCustomRoom();
-    tryTriggerCustomStartFromReady();
-  });
-  function sendCustomLeave() {
-    const msg = { type: 'cust_leave', from: myNetId, id: myNetId };
-    try { if (custBc) custBc.postMessage(msg); } catch (e) {}
-    try { if (custMqtt && custMqtt.connected && custTopic) custMqtt.publish(custTopic, JSON.stringify(msg)); } catch (e) {}
-  }
-  window.addEventListener('beforeunload', () => {
-    if (matchState === 'custom_lobby') sendCustomLeave();
-  });
-  document.getElementById('btn-cust-leave').addEventListener('click', () => {
-    sendCustomLeave();
-    closeCustomRoomNet();
-    showScreen('screen-lobby');
-  });
-
   document.getElementById('btn-start-match').addEventListener('click', () => {
     initAudio();
     isCustomSpectator = false;
@@ -6064,12 +5717,15 @@
       if (npcSubRule === 'dm') { selectedMode = 'dm'; teamFormat = '1v1'; startNewMatch(false); }
       else { selectedMode = 'npc'; teamFormat = npcSubRule; startNewMatch(false); }
     } else if (mainCategory === 'online') {
-      if (onlSubRule === 'dm') { selectedMode = 'dm'; teamFormat = '1v1'; startMatchmaking('dm_online'); }
+      teamFormat = '1v1';
+      if (onlSubRule === 'dm') { selectedMode = 'dm'; startMatchmaking('dm_online'); }
       else { selectedMode = onlSubRule; startMatchmaking(onlSubRule); }
     } else {
       const pass = (document.getElementById('input-passphrase').value || '').trim();
       if (!pass) { document.getElementById('input-passphrase').focus(); return; }
-      enterCustomLobby(pass);
+      selectedMode = 'friend';
+      teamFormat = '1v1';
+      startMatchmaking('friend');
     }
   });
 
